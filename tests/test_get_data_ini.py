@@ -78,6 +78,59 @@ class TestGetDataIni(unittest.TestCase):
         result = getDataIni.getDataINI(ini_path, 'testPath', file_check=1)
         self.assertEqual(result[0], 'error')
 
+    def test_get_data_ini_multiple_sections(self):
+        """Test reading key from multiple sections."""
+        config = configparser.ConfigParser()
+        config['section1'] = {'testKey': 'value1'}
+        config['section2'] = {'testKey': 'value2'}
+        ini_path = os.path.join(self.temp_dir, 'test4.ini')
+        with open(ini_path, 'w') as f:
+            config.write(f)
+        
+        result = getDataIni.getDataINI(ini_path, 'testKey')
+        # Should return all values
+        self.assertGreaterEqual(len(result), 1)
+        self.assertIn('value1', result)
+        self.assertIn('value2', result)
+
+    def test_get_data_ini_empty_file(self):
+        """Test reading from empty INI file."""
+        ini_path = os.path.join(self.temp_dir, 'empty.ini')
+        with open(ini_path, 'w') as f:
+            f.write('')
+        
+        result = getDataIni.getDataINI(ini_path, 'testKey')
+        self.assertEqual(result[0], 'error')
+
+    def test_get_data_ini_default_section(self):
+        """Test reading from DEFAULT section."""
+        config = configparser.ConfigParser()
+        config['DEFAULT'] = {'testKey': 'default_value'}
+        ini_path = os.path.join(self.temp_dir, 'test5.ini')
+        with open(ini_path, 'w') as f:
+            config.write(f)
+        
+        result = getDataIni.getDataINI(ini_path, 'testKey')
+        self.assertEqual(result[0], 'default_value')
+
+    def test_get_data_ini_xml_file(self):
+        """Test reading from XML file (with .ini extension)."""
+        xml_content = '''<?xml version="1.0"?>
+<root>
+    <testKey>xml_value</testKey>
+</root>'''
+        ini_path = os.path.join(self.temp_dir, 'test.xml.ini')
+        with open(ini_path, 'w') as f:
+            f.write(xml_content)
+        
+        result = getDataIni.getDataINI(ini_path, 'testKey')
+        self.assertEqual(result[0], 'xml_value')
+
+    def test_get_data_ini_empty_path(self):
+        """Test reading with empty file path."""
+        result = getDataIni.getDataINI('', 'testKey')
+        self.assertEqual(result[0], 'error')
+
 
 if __name__ == '__main__':
     unittest.main()
