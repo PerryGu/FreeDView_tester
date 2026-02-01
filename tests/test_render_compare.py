@@ -66,6 +66,35 @@ class TestRenderCompare(unittest.TestCase):
         self.assertIsInstance(mse, float)
         self.assertGreater(mse, 0)
 
+    def test_mean_squared_error_zero_difference(self):
+        """Test MSE with images that have zero difference."""
+        image = np.ones((50, 50), dtype=np.uint8) * 128
+        mse = mean_squared_error(image, image)
+        self.assertEqual(mse, 0.0)
+
+    def test_mean_squared_error_large_difference(self):
+        """Test MSE with images that have large difference."""
+        image1 = np.zeros((100, 100), dtype=np.uint8)
+        image2 = np.ones((100, 100), dtype=np.uint8) * 255
+        mse = mean_squared_error(image1, image2)
+        self.assertGreater(mse, 0.0)
+        # Maximum MSE for uint8 images would be around 65025 (255^2)
+        self.assertLess(mse, 70000.0)
+
+    def test_mean_squared_error_small_images(self):
+        """Test MSE with very small images."""
+        image1 = np.array([[100]], dtype=np.uint8)
+        image2 = np.array([[110]], dtype=np.uint8)
+        mse = mean_squared_error(image1, image2)
+        self.assertEqual(mse, 100.0)  # (110-100)^2 = 100
+
+    def test_mean_squared_error_different_shapes_raises_error(self):
+        """Test MSE raises ValueError for different image shapes."""
+        image1 = np.ones((100, 100), dtype=np.uint8)
+        image2 = np.ones((50, 50), dtype=np.uint8)
+        with self.assertRaises(ValueError):
+            mean_squared_error(image1, image2)
+
 
 if __name__ == '__main__':
     unittest.main()
