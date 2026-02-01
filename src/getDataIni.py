@@ -2,6 +2,7 @@
 import os
 import logging
 import configparser
+import xml.etree.ElementTree as ET
 from typing import List
 
 # Constants
@@ -78,52 +79,88 @@ def _get_data_ini_impl(file_path: str, tag_name: str, file_check: bool = False) 
         return [ERROR_VALUE]
     
     if not os.path.exists(file_path):
-        logger.warning(f"INI file not found: {file_path}")
+        logger.warning(f"Configuration file not found: {file_path}")
         return [ERROR_VALUE]
     
+    # Detect if file is XML by checking first bytes
+    # Note: Some files have .ini extension but contain XML content (e.g., cameracontrol.ini).
+    # This code handles both INI format and XML format regardless of file extension.
     try:
-        config = configparser.ConfigParser()
-        # Use read() with encoding for better compatibility
-        # Note: read() returns list of successfully read files
-        read_files = config.read(file_path, encoding='utf-8')
-        if not read_files:
-            logger.error(f"Failed to read INI file (may be empty or invalid): {file_path}")
-            return [ERROR_VALUE]
-    except configparser.Error as e:
-        # Handle parsing errors (MissingSectionHeaderError, etc.)
-        logger.error(f"Failed to parse INI file '{file_path}': {e}", exc_info=True)
-        return [ERROR_VALUE]
+        with open(file_path, 'rb') as f:
+            first_bytes = f.read(1024).strip()
+            is_xml = first_bytes.startswith(b'<')
     except Exception as e:
-        # Handle other unexpected errors (permission issues, etc.)
-        logger.error(f"Unexpected error reading INI file '{file_path}': {e}", exc_info=True)
-        return [ERROR_VALUE]
+        logger.warning(f"Error detecting file type for '{file_path}': {e}")
+        is_xml = False
     
     data_list = []
     
-    # Try to find the value in all sections
-    for section_name in config.sections():
-        if config.has_option(section_name, tag_name):
+    # Handle XML files (even if they have .ini extension)
+    if is_xml:
+        try:
+            tree = ET.parse(file_path)
+            root = tree.getroot()
+            
+            # Search for XML elements matching the tag_name
+            # This handles both direct children and nested elements
+            for elem in root.iter(tag_name):
+                if elem.text is not None:
+                    value = elem.text.strip()
+                    if value:  # Only add non-empty values
+                        data_list.append(value)
+            
+            # If tag_name not found, log debug message
+            if not data_list:
+                logger.debug(f"Tag '{tag_name}' not found in XML file: {file_path}")
+        except ET.ParseError as e:
+            logger.error(f"Failed to parse XML file '{file_path}': {e}", exc_info=True)
+            return [ERROR_VALUE]
+        except Exception as e:
+            logger.error(f"Unexpected error reading XML file '{file_path}': {e}", exc_info=True)
+            return [ERROR_VALUE]
+    else:
+        # Handle INI files (original logic)
+        try:
+            config = configparser.ConfigParser()
+            # Use read() with encoding for better compatibility
+            # Note: read() returns list of successfully read files
+            read_files = config.read(file_path, encoding='utf-8')
+            if not read_files:
+                logger.error(f"Failed to read INI file (may be empty or invalid): {file_path}")
+                return [ERROR_VALUE]
+        except configparser.Error as e:
+            # Handle parsing errors (MissingSectionHeaderError, etc.)
+            logger.error(f"Failed to parse INI file '{file_path}': {e}", exc_info=True)
+            return [ERROR_VALUE]
+        except Exception as e:
+            # Handle other unexpected errors (permission issues, etc.)
+            logger.error(f"Unexpected error reading INI file '{file_path}': {e}", exc_info=True)
+            return [ERROR_VALUE]
+        
+        # Try to find the value in all sections
+        for section_name in config.sections():
+            if config.has_option(section_name, tag_name):
+                try:
+                    value = config.get(section_name, tag_name)
+                    # Handle values that might contain spaces - preserve them
+                    data_list.append(value)
+                except (configparser.NoOptionError, configparser.NoSectionError):
+                    # Should not happen due to has_option check, but handle gracefully
+                    logger.debug(f"Unexpected error getting option '{tag_name}' from section '{section_name}'")
+                    continue
+                except Exception as e:
+                    logger.warning(f"Error reading option '{tag_name}' from section '{section_name}': {e}")
+                    continue
+        
+        # If not found in sections, try DEFAULT section
+        if not data_list and config.has_option(configparser.DEFAULTSECT, tag_name):
             try:
-                value = config.get(section_name, tag_name)
-                # Handle values that might contain spaces - preserve them
+                value = config.get(configparser.DEFAULTSECT, tag_name)
                 data_list.append(value)
             except (configparser.NoOptionError, configparser.NoSectionError):
-                # Should not happen due to has_option check, but handle gracefully
-                logger.debug(f"Unexpected error getting option '{tag_name}' from section '{section_name}'")
-                continue
+                pass
             except Exception as e:
-                logger.warning(f"Error reading option '{tag_name}' from section '{section_name}': {e}")
-                continue
-    
-    # If not found in sections, try DEFAULT section
-    if not data_list and config.has_option(configparser.DEFAULTSECT, tag_name):
-        try:
-            value = config.get(configparser.DEFAULTSECT, tag_name)
-            data_list.append(value)
-        except (configparser.NoOptionError, configparser.NoSectionError):
-            pass
-        except Exception as e:
-            logger.warning(f"Error reading option '{tag_name}' from DEFAULT section: {e}")
+                logger.warning(f"Error reading option '{tag_name}' from DEFAULT section: {e}")
     
     # If file_check is enabled, verify all returned paths exist
     if file_check:
