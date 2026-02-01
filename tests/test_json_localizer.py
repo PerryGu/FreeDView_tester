@@ -53,6 +53,38 @@ class TestJsonLocalizer(unittest.TestCase):
         result = self.json_localizer.is_event(pattern, test_path)
         self.assertTrue(result, "Should match pattern with digits")
 
+    def test_is_event_exact_match(self):
+        """Test event pattern matching with exact character matches."""
+        pattern = "E##_##_##_##_##_##__"
+        test_path = "/some/path/E12_34_56_78_90_12__"
+        result = self.json_localizer.is_event(pattern, test_path)
+        self.assertTrue(result, "Should match when pattern and path match exactly")
+
+    def test_is_event_partial_match(self):
+        """Test event pattern matching with partial match (less than 20 chars)."""
+        pattern = "E##_##_##_##_##_##__"
+        test_path = "/some/path/E12_34"  # Too short
+        result = self.json_localizer.is_event(pattern, test_path)
+        self.assertFalse(result, "Should not match if match count < 20")
+
+    def test_get_json_files_empty_directory(self):
+        """Test get_json_files with empty directory."""
+        result = self.json_localizer.get_json_files(
+            self.temp_dir, "", "", False, set()
+        )
+        self.assertEqual(len(result), 6)  # Returns 6 lists
+        self.assertEqual(len(result[0]), 0)  # No folders found
+
+    def test_get_json_files_nonexistent_path(self):
+        """Test get_json_files with nonexistent path."""
+        result = self.json_localizer.get_json_files(
+            "/nonexistent/path", "", "", False, set()
+        )
+        self.assertEqual(len(result), 6)
+        # Should return empty lists
+        for item in result:
+            self.assertEqual(len(item), 0)
+
 
 if __name__ == '__main__':
     unittest.main()
