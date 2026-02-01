@@ -23,6 +23,37 @@ class JsonLocalizer:
         self.sport_folder_index = 1
         self.stadium_folder_index = 1
 
+    def _update_paths_in_json(self, json_obj, old_path: str, new_path: str):
+        """
+        Recursively update paths in JSON structure.
+        
+        This function traverses the JSON object and replaces all occurrences
+        of old_path with new_path in string values. It handles nested structures
+        (dicts, lists) and preserves the JSON structure.
+        
+        Args:
+            json_obj: JSON object (dict, list, or primitive type)
+            old_path: Old path pattern to replace
+            new_path: New path to replace with
+            
+        Returns:
+            Updated JSON object with paths replaced
+        """
+        if isinstance(json_obj, dict):
+            # Recursively process dictionary values
+            return {key: self._update_paths_in_json(value, old_path, new_path) 
+                    for key, value in json_obj.items()}
+        elif isinstance(json_obj, list):
+            # Recursively process list items
+            return [self._update_paths_in_json(item, old_path, new_path) 
+                    for item in json_obj]
+        elif isinstance(json_obj, str):
+            # Replace path in string values
+            return json_obj.replace(old_path, new_path)
+        else:
+            # Return primitive types (int, float, bool, None) unchanged
+            return json_obj
+
     def do_it(self, ini_path: Optional[str] = None) -> None:
         """
         Main entry point for JSON localization process.
@@ -414,8 +445,16 @@ class JsonLocalizer:
                 continue
 
             try:
+                # Read and parse JSON file properly
                 with open(json_file_path, 'r', encoding='utf-8') as json_file:
-                    json_data = json_file.read()
+                    try:
+                        json_obj = json.load(json_file)
+                    except json.JSONDecodeError as json_error:
+                        logger.error(
+                            f"Invalid JSON in file '{json_file_path}': {json_error}. "
+                            f"Skipping file."
+                        )
+                        continue
 
                 # Extract event and set names from folder paths.
                 split_string = folder_frame_list[i].split('/')
@@ -430,14 +469,17 @@ class JsonLocalizer:
                 new_event_path = os.path.join(event_with_set_path_list[i], set_name)
                 new_event_path = new_event_path.replace('\\', '/')
 
-                # Replace all occurrences of old path with new path in JSON content.
-                modified_data = json_data.replace(old_event_path, new_event_path)
+                # Recursively update paths in JSON structure using proper JSON parsing.
+                # This is safer than string replacement as it only modifies string values
+                # and preserves the JSON structure.
+                updated_json_obj = self._update_paths_in_json(json_obj, old_event_path, new_event_path)
 
                 # Write localized JSON file as testMe.json for FreeDView to use.
                 json_file_dup = os.path.join(json_folder_list[i], 'testMe.json')
                 try:
                     with open(json_file_dup, 'w', encoding='utf-8') as new_json_file:
-                        new_json_file.write(modified_data)
+                        # Use json.dumps with indent for readable output (matches original format)
+                        json.dump(updated_json_obj, new_json_file, indent=2, ensure_ascii=False)
                     logger.debug(f"Created localized JSON: {json_file_dup}")
                 except Exception as write_error:
                     logger.error(
