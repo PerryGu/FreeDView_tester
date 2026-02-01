@@ -14,6 +14,7 @@ from typing import Optional
 import jsonLocalizer as json_localizer
 import freeDViewRunner
 import renderCompare
+import prepareUIData
 
 
 # Configure logging
@@ -40,8 +41,8 @@ def get_ini_path(ini_path: Optional[str] = None) -> str:
             sys.exit(1)
         return ini_path
 
-    # Default to freeDView_tester.ini in the project directory
-    project_path = os.path.dirname(__file__)
+    # Default to freeDView_tester.ini in the project directory (parent of src/)
+    project_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     default_ini = os.path.join(project_path, 'freeDView_tester.ini')
     if not os.path.exists(default_ini):
         logger.error(f"Default INI file not found: {default_ini}")
@@ -84,8 +85,39 @@ def run_compare(args: argparse.Namespace) -> None:
         max_workers = getattr(args, 'max_workers', 4)
         render_compare = renderCompare.RenderCompare(ini_path, max_workers=max_workers)
         logger.info("Phase 3 completed successfully")
+        # Explicitly flush all logging handlers to ensure output is written before process exits
+        for handler in logging.root.handlers:
+            handler.flush()
+        sys.stdout.flush()
+        sys.stderr.flush()
     except Exception as e:
         logger.error(f"Phase 3 failed: {e}")
+        for handler in logging.root.handlers:
+            handler.flush()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        sys.exit(1)
+
+
+def run_prepare_ui(args: argparse.Namespace) -> None:
+    """Run Phase 4: Prepare UI Data."""
+    logger.info("Starting Phase 4: Prepare UI Data")
+    ini_path = get_ini_path(args.ini)
+    try:
+        prepare_ui_data = prepareUIData.PrepareUIData()
+        prepare_ui_data.do_it(ini_path)
+        logger.info("Phase 4 completed successfully")
+        # Explicitly flush all logging handlers to ensure output is written before process exits
+        for handler in logging.root.handlers:
+            handler.flush()
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception as e:
+        logger.error(f"Phase 4 failed: {e}")
+        for handler in logging.root.handlers:
+            handler.flush()
+        sys.stdout.flush()
+        sys.stderr.flush()
         sys.exit(1)
 
 
@@ -115,6 +147,13 @@ def run_all(args: argparse.Namespace) -> None:
         logger.info("Phase 3: Render Compare")
         logger.info("=" * 50)
         render_compare = renderCompare.RenderCompare(ini_path, max_workers=max_workers)
+
+        # Phase 4: Prepare UI Data
+        logger.info("=" * 50)
+        logger.info("Phase 4: Prepare UI Data")
+        logger.info("=" * 50)
+        prepare_ui_data = prepareUIData.PrepareUIData()
+        prepare_ui_data.do_it(ini_path)
 
         logger.info("=" * 50)
         logger.info("All phases completed successfully!")
@@ -193,7 +232,8 @@ Examples:
   python main.py localize                # Run only Phase 1
   python main.py render                  # Run only Phase 2
   python main.py compare                 # Run only Phase 3
-  python main.py compare --ui path1 path2 path3 path4 path5  # Compare from UI
+  python main.py prepare-ui              # Run only Phase 4
+  python main.py compare-ui path1 path2 path3 path4 path5  # Compare from UI
         """
     )
 
@@ -242,6 +282,12 @@ Examples:
         help='Run Phase 3: Render Compare'
     )
 
+    # 'prepare-ui' command
+    prepare_ui_parser = subparsers.add_parser(
+        'prepare-ui',
+        help='Run Phase 4: Prepare UI Data'
+    )
+
     # 'compare --ui' command
     compare_ui_parser = subparsers.add_parser(
         'compare-ui',
@@ -271,7 +317,8 @@ Examples:
         'localize': run_localize,
         'render': run_render,
         'compare': run_compare,
-        'compare-ui': run_compare_ui
+        'compare-ui': run_compare_ui,
+        'prepare-ui': run_prepare_ui
     }
 
     handler = command_handlers.get(args.command)
