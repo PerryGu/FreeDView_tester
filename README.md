@@ -104,7 +104,7 @@ All paths stored in XML files are converted to relative paths (relative to the `
 -   **Self-Contained Data**: XML files contain all necessary path information without machine-specific absolute paths
 -   **Version Control Friendly**: Relative paths are more suitable for version control systems
 
-The renderCompare UI tool resolves these relative paths at runtime based on the configured `testSets_results` location, ensuring flexibility while maintaining data integrity.
+The [renderCompare](https://github.com/PerryGu/renderCompare) UI tool resolves these relative paths at runtime based on the configured `testSets_results` location, ensuring flexibility while maintaining data integrity.
 
 ------------------------------------------------------------------------
 
@@ -132,8 +132,8 @@ Aggregates comparison results from all test sets into a unified XML file for UI 
 
 Phase 4 was designed with comprehensive test management and data portability in mind. By scanning both `testSets` and `testSets_results`, the tool provides a complete view of test status across the entire test suite. The aggregation process:
 
--   **Test Status Visibility**: Enables UI tools to display which tests are ready, partially complete, or not yet started
--   **Bootstrap Support**: Allows UI tools to show all available tests even before rendering begins
+-   **Test Status Visibility**: Enables [renderCompare](https://github.com/PerryGu/renderCompare) UI tools to display which tests are ready, partially complete, or not yet started
+-   **Bootstrap Support**: Allows [renderCompare](https://github.com/PerryGu/renderCompare) UI tools to show all available tests even before rendering begins
 -   **Unified Data Model**: Provides a single source of truth for test metadata, metrics, and status
 -   **Flexible Discovery**: Automatically adapts to different folder structures (SportType/Event/Set/Frame, SportType/Team/Event/Set/Frame, etc.)
 -   Preserves all essential metadata from individual comparisons
@@ -216,7 +216,7 @@ Prepare UI Data (Phase 4)
                                    │
                     ┌──────────────┼──────────────┬──────────────┐
                     │              │              │              │
-         ┌──────────▼──────┐ ┌─────▼──────┐ ┌─────▼──────┐ ┌─────▼───────┐
+         ┌──────────▼──────┐ ┌─────▼──────┐ ┌─────▼──────┐ ┌─────▼──────┐
          │  Phase 1:       │ │ Phase 2:   │ │ Phase 3:   │ │ Phase 4:    │
          │  JSON Localizer │ │ FreeDView  │ │ Render     │ │ Prepare     │
          │                 │ │ Runner     │ │ Compare    │ │ UI Data     │
@@ -225,7 +225,7 @@ Prepare UI Data (Phase 4)
          │    patterns     │ │   FreeDView│ │   images   │ │   XML files │
          │  - Creates      │ │ - Renders  │ │ - Generates│ │ - Aggregates│
          │    testMe.json  │ │   sequences│ │   reports  │ │   data      │
-         └─────────────────┘ └────────────┘ └────────────┘ └─────────────┘
+         └─────────────────┘ └────────────┘ └────────────┘ └──────────── ┘
                     │              │              │              │
                     └──────────────┼──────────────┴──────────────┘
                                    │
@@ -573,12 +573,12 @@ Phase 4 generates `uiData.xml` in the `testSets_results` root, containing aggreg
     - For tests with rendered images but no comparison: Extracted from the render folder structure
     - For "Not Ready" tests: Empty string (no render versions yet)
     - Format: Comma-separated list if a test belongs to multiple render versions (e.g., `"version1,version2"`)
-    - Enables UI tools to filter tests by render version using a comboBox dropdown
+    - Enables [renderCompare](https://github.com/PerryGu/renderCompare) UI tools to filter tests by render version using a comboBox dropdown
     - Supports "All render versions" mode (default) which displays all tests regardless of render version
 - Provides summary statistics for quick overview
 - Designed for efficient loading in UI applications
-- Enables UI tools to display test completion status and identify which tests still need processing
-- Enables UI tools to discover and filter by available render version comparisons
+- Enables [renderCompare](https://github.com/PerryGu/renderCompare) UI tools to display test completion status and identify which tests still need processing
+- Enables [renderCompare](https://github.com/PerryGu/renderCompare) UI tools to discover and filter by available render version comparisons
 
 ------------------------------------------------------------------------
 
@@ -638,7 +638,7 @@ The `run_on_test_list` parameter allows you to specify which tests to process in
 - Run specific tests without processing the entire test suite
 - Re-run failed tests
 - Process tests incrementally
-- Batch process multiple selected tests from the UI tool
+- Batch process multiple selected tests from the [renderCompare](https://github.com/PerryGu/renderCompare) UI tool
 
 **Format:**
 - Empty `[]`: Process all tests (default behavior)
@@ -658,7 +658,7 @@ run_on_test_list = [NFL/E17_01_07_16_01_25_LIVE_05/S170123190428/F0224, MLB/Dodg
 ```
 
 **UI Tool Integration:**
-The complementary `tableview_test` UI tool can automatically update this parameter when you select multiple rows and choose to run test commands:
+The complementary [renderCompare](https://github.com/PerryGu/renderCompare) UI tool can automatically update this parameter when you select multiple rows and choose to run test commands:
 - Select multiple rows using Ctrl+Click
 - Right-click and choose "Run All Phases" or "Run Phase 3"
 - The UI tool automatically formats all selected test keys as a comma-separated list
@@ -789,7 +789,7 @@ Features comprehensive error handling, logging, and progress tracking.
 
 ## Related Tools
 
-A complementary C++/Qt UI application is available for visualizing and analyzing the comparison results generated by this tool. The UI tool provides an interactive interface for browsing diff images, alpha masks, and XML reports.
+A complementary C++/Qt UI application, [renderCompare](https://github.com/PerryGu/renderCompare), is available for visualizing and analyzing the comparison results generated by this tool. The UI tool provides an interactive interface for browsing diff images, alpha masks, and XML reports.
 
 ## License
 
