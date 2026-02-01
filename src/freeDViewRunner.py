@@ -67,12 +67,40 @@ class FreeDViewRunner:
         freedview_ver_tag = 'freedviewVer'
         event_name_tag = 'eventName'
         set_name_tag = 'setName'
+        test_filter_tag = 'testFilter'
 
         json_file_path_set_test = data_ini.getDataINI(ini_path, set_test_path_tag)[0]
         freedview_path = data_ini.getDataINI(ini_path, freedview_path_tag)[0]
         freedview_ver = data_ini.getDataINI(ini_path, freedview_ver_tag)[0]
         event_name_set_test = data_ini.getDataINI(ini_path, event_name_tag)[0]
         set_name_set_test = data_ini.getDataINI(ini_path, set_name_tag)[0]
+        test_filter_raw = data_ini.getDataINI(ini_path, test_filter_tag)[0] if data_ini.getDataINI(ini_path, test_filter_tag)[0] != data_ini.ERROR_VALUE else ""
+
+        # Parse testFilter (comma-separated or newline-separated list of testKeys)
+        # Handles empty filter as: "", "[]", or whitespace-only
+        # Supports bracket format: [test1] or [test1, test2, test3]
+        test_filter_set = set()
+        if test_filter_raw and test_filter_raw.strip():
+            test_filter_stripped = test_filter_raw.strip()
+            # Handle empty array format: "[]"
+            if test_filter_stripped == "[]" or test_filter_stripped == "":
+                logger.debug("testFilter is empty ([]) - processing all tests")
+            else:
+                # Strip brackets if present: [test1] -> test1, [test1, test2] -> test1, test2
+                if test_filter_stripped.startswith('[') and test_filter_stripped.endswith(']'):
+                    test_filter_stripped = test_filter_stripped[1:-1].strip()
+                # Split by comma or newline, strip whitespace
+                for key in test_filter_stripped.replace('\n', ',').split(','):
+                    key = key.strip()
+                    # Skip empty keys and "[]" entries
+                    if key and key != "[]":
+                        test_filter_set.add(key.replace('\\', '/'))
+                if test_filter_set:
+                    logger.info(f"testFilter active: {len(test_filter_set)} test(s) specified")
+                else:
+                    logger.debug("testFilter is empty - processing all tests")
+        else:
+            logger.debug("testFilter is empty - processing all tests")
 
         # Validate INI data
         if (json_file_path_set_test == data_ini.ERROR_VALUE or
@@ -88,7 +116,7 @@ class FreeDViewRunner:
         create_folders = None
         get_json_info = json_localizer_obj.get_json_files(
             json_file_path_set_test, event_name_set_test,
-            set_name_set_test, create_folders
+            set_name_set_test, create_folders, test_filter_set
         )
 
         # Extract frame and JSON file lists from JsonLocalizer results.
@@ -293,6 +321,9 @@ class FreeDViewRunner:
             if output_path_obj.exists():
                 logger.debug(f"Removing existing output directory: {output_path}")
                 shutil.rmtree(output_path)
+            
+            # Create output directory (FreeDView may need it to exist).
+            # We'll clean it up if rendering fails or produces no images.
             try:
                 output_path_obj.mkdir(parents=True, exist_ok=True)
             except Exception as e:
@@ -301,11 +332,40 @@ class FreeDViewRunner:
 
             # Use testMe.json (localized version) instead of standAloneRender.json.
             set_test_path = task['json_file_path'].replace(STANDALONE_RENDER, TEST_ME_JSON)
-            self.run_freedview(
+            render_success = self.run_freedview(
                 task['freedview_ver_path'], set_test_path, output_res,
                 output_path, sequence_length
             )
-            return True
+            
+            # Verify that images were actually created. If not, clean up the folder structure.
+            if render_success:
+                # Check if any image files were created
+                image_files = list(output_path_obj.glob('*.jpg')) + list(output_path_obj.glob('*.png'))
+                if not image_files:
+                    logger.warning(
+                        f"Rendering reported success but no images found in {output_path}. "
+                        f"Cleaning up empty folder structure."
+                    )
+                    render_success = False
+            
+            # If rendering failed or no images were created, clean up the folder structure
+            if not render_success:
+                try:
+                    if output_path_obj.exists():
+                        logger.debug(f"Cleaning up failed render output directory: {output_path}")
+                        shutil.rmtree(output_path)
+                        # Also clean up parent directories if they're empty
+                        parent_path = output_path_obj.parent
+                        if parent_path.exists() and not any(parent_path.iterdir()):
+                            parent_path.rmdir()
+                            # Clean up version comparison folder if empty
+                            version_comp_path = parent_path.parent
+                            if version_comp_path.exists() and not any(version_comp_path.iterdir()):
+                                version_comp_path.rmdir()
+                except Exception as e:
+                    logger.warning(f"Error cleaning up failed render directory {output_path}: {e}")
+            
+            return render_success
 
         except Exception as e:
             logger.error(
@@ -372,7 +432,7 @@ class FreeDViewRunner:
         output_res: List[int],
         output_path: str,
         sequence_length: List[int]
-    ) -> None:
+    ) -> bool:
         """
         Run FreeDView to create new images and rename them.
 
@@ -382,6 +442,9 @@ class FreeDViewRunner:
             output_res: Output resolution [width, height]
             output_path: Path where output images will be saved
             sequence_length: [start_frame, end_frame]
+        
+        Returns:
+            True if render succeeded, False otherwise
         """
         logger.info(f"Running FreeDView render: {os.path.basename(set_test_path)}")
 
@@ -396,7 +459,7 @@ class FreeDViewRunner:
         
         if not os.path.exists(freedview_exe):
             logger.error(f"FreeDView executable not found: {freedview_exe}")
-            return
+            return False
 
         output_file_path = os.path.join(output_path, OUTPUT_IMAGE_PREFIX)
 
@@ -413,6 +476,12 @@ class FreeDViewRunner:
         ]
 
         logger.debug(f"FreeDView command: {' '.join(cmd)}")
+        logger.info(f"FreeDView executable: {freedview_exe}")
+        logger.info(f"FreeDView working directory: {fd_path}")
+        logger.info(f"JSON file path: {set_test_path}")
+        logger.info(f"Output path: {output_path}")
+        logger.info(f"Output resolution: {output_res_x}x{output_res_y}")
+        logger.info(f"Frame range: {start_frame} to {end_frame}")
 
         # Execute FreeDView renderer as subprocess.
         # Capture stdout/stderr for error reporting.
@@ -426,21 +495,28 @@ class FreeDViewRunner:
             stdout, stderr = process.communicate()
 
             if process.returncode != 0:
-                error_msg = stderr.decode('utf-8', errors='ignore')
+                error_msg_stderr = stderr.decode('utf-8', errors='ignore') if stderr else ""
+                error_msg_stdout = stdout.decode('utf-8', errors='ignore') if stdout else ""
                 logger.error(
-                    f"FreeDView process failed with return code {process.returncode}. "
-                    f"Error: {error_msg}"
+                    f"FreeDView process failed with return code {process.returncode} (0x{process.returncode:X}). "
+                    f"Command: {' '.join(cmd)}"
                 )
-                return
+                if error_msg_stderr:
+                    logger.error(f"FreeDView stderr: {error_msg_stderr}")
+                if error_msg_stdout:
+                    logger.error(f"FreeDView stdout: {error_msg_stdout}")
+                if not error_msg_stderr and not error_msg_stdout:
+                    logger.error("FreeDView produced no error output (crash likely occurred silently)")
+                return False
             else:
                 logger.debug("FreeDView process completed successfully")
 
         except FileNotFoundError:
             logger.error(f"FreeDView executable not found: {freedview_exe}")
-            return
+            return False
         except Exception as e:
             logger.error(f"Exception running FreeDView: {e}", exc_info=True)
-            return
+            return False
 
         # Rename rendered images to sequential format (e.g., 0001.jpg, 0002.jpg).
         # FreeDView may generate files with different naming, so we standardize them.
@@ -468,6 +544,7 @@ class FreeDViewRunner:
             logger.warning(f"Error renaming image files in {output_path}: {e}")
 
         logger.debug(f"Render completed for: {set_test_path}")
+        return True
 
 
 def run_freedview_runner() -> None:
