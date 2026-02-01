@@ -54,8 +54,8 @@ class PrepareUIData:
         test_sets_results_path = None
         event_name_pattern = None
         set_name_pattern = None
-        # Phase 4 always processes all tests - ignore run_on_test_list
-        # run_on_test_list is used in Phase 1 (Localize), Phase 2 (Render), and Phase 3 (Compare) for targeted processing
+        # Phase 4 always processes all tests - ignore testFilter
+        # testFilter is used in Phase 1 (Localize), Phase 2 (Render), and Phase 3 (Compare) for targeted processing
         # Phase 4 (Prepare UI Data) always processes all tests to maintain complete uiData.xml
         test_filter_set = set()
         
@@ -277,6 +277,7 @@ class PrepareUIData:
             stadium_name = ""
             category_name = ""
             event_name = ""
+            set_name = ""  # Initialize set_name to avoid potential NameError
             
             if len(parts) >= 3:
                 # At minimum: Event/Set/F
@@ -305,6 +306,7 @@ class PrepareUIData:
             
             return {
                 'eventName': event_name,
+                'setName': set_name if len(parts) >= 3 else '',
                 'sportType': sport_type,
                 'stadiumName': stadium_name,
                 'categoryName': category_name,
