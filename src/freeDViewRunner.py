@@ -527,14 +527,43 @@ class FreeDViewRunner:
             for image_file in output_path_obj.iterdir():
                 if image_file.is_file():
                     image_file_path = str(image_file)
-                    # Extract frame number from filename using regex.
-                    frame_numbers = re.findall(r'\d+', image_file_path)
+                    image_file_name = image_file.name  # Get just the filename, not full path
+                    
+                    # Extract frame number from filename more robustly.
+                    # FreeDView typically outputs files like "wauwStills_F001.jpg" or similar patterns.
+                    # Strategy: Look for the last sequence of digits before the file extension.
+                    # This avoids issues with numbers in the directory path.
+                    
+                    # Remove file extension to get base name
+                    base_name = image_file.stem  # Gets filename without extension
+                    
+                    # Find all sequences of digits in the base name
+                    frame_numbers = re.findall(r'\d+', base_name)
+                    
                     if frame_numbers:
+                        # Use the last (rightmost) number sequence in the filename
+                        # This handles patterns like "wauwStills_F001" or "frame_001" or "001"
                         frame_index = frame_numbers[-1]
-                        new_image_path = output_path_obj / f"{frame_index}.jpg"
-                        if image_file_path != str(new_image_path):
-                            image_file.rename(new_image_path)
-                            renamed_count += 1
+                        
+                        # Validate that we got a reasonable frame number (not a tiny number from path)
+                        # Frame numbers should typically be >= 1 (or 0 if 0-indexed)
+                        try:
+                            frame_num = int(frame_index)
+                            # If the number is suspiciously small and there are multiple numbers,
+                            # it might be from a path component - but we'll trust the filename
+                            if frame_num >= 0:  # Accept 0 or positive numbers
+                                new_image_path = output_path_obj / f"{frame_index}.jpg"
+                                if image_file_path != str(new_image_path):
+                                    image_file.rename(new_image_path)
+                                    renamed_count += 1
+                                else:
+                                    logger.debug(f"File already correctly named: {image_file_name}")
+                            else:
+                                logger.warning(f"Invalid frame number extracted from '{image_file_name}': {frame_num}")
+                        except ValueError:
+                            logger.warning(f"Could not convert frame number '{frame_index}' to integer from '{image_file_name}'")
+                    else:
+                        logger.warning(f"No frame number found in filename: {image_file_name}")
 
             if renamed_count > 0:
                 logger.debug(f"Renamed {renamed_count} image file(s)")
