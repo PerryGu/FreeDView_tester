@@ -12,6 +12,11 @@ Automated testing and comparison tool for FreeDView renderer versions. This tool
 -   **Progress Tracking**: Real-time progress indication for long operations
 -   **External Process Management**: Integrates with FreeDView renderer with error handling
 -   **Parallel Processing**: Multi-threaded rendering and comparison for improved performance
+-   **Performance Optimization**: Frame-level parallelization for image processing operations
+-   **Data Aggregation**: Automated UI data preparation from comparison results with status tracking
+-   **Status Management**: Tracks test completion status (Ready, Rendered not compare, Not Ready) for comprehensive test monitoring
+-   **Render Version Discovery**: Automatically discovers and catalogs all render version folder names for UI filtering and selection
+-   **Portable Data Storage**: Relative path storage for cross-platform compatibility
 
 **Quick Start:**
 ```bash
@@ -23,7 +28,7 @@ python src/main.py all
 
 ## Overview
 
-FreeDView Tester is a three-phase automated testing pipeline designed to identify visual differences between FreeDView renderer versions. The tool processes test sets, renders them using different FreeDView versions, and provides comprehensive comparison analysis.
+FreeDView Tester is a four-phase automated testing pipeline designed to identify visual differences between FreeDView renderer versions. The tool processes test sets, renders them using different FreeDView versions, and provides comprehensive comparison analysis with aggregated results ready for UI visualization.
 
 It was originally developed to support the needs of my team at Intel, providing an automated solution for regression testing and version comparison of the FreeDView renderer.
 
@@ -78,6 +83,65 @@ Compares rendered images between versions and generates reports.
 -   Creates alpha mask images using Otsu thresholding
 -   Generates XML reports with per-frame comparison data
 -   Extracts metadata from directory structure
+-   **Performance Optimization**: Frame-level parallelization using thread pools for concurrent image processing
+-   **Portable Data Storage**: Stores relative paths in XML files for cross-platform compatibility and data portability
+
+### Performance Enhancements
+
+Phase 3 implements two levels of parallelization to maximize throughput:
+
+-   **Folder-level parallelism**: Processes multiple comparison folders concurrently
+-   **Frame-level parallelism**: Processes multiple frames within each folder concurrently using configurable thread pools (default: 2 threads per folder)
+
+This dual-level approach significantly reduces processing time for large test suites. The frame-level parallelization particularly accelerates the computationally intensive operations of image comparison, difference image generation, and alpha mask creation, resulting in 2-3x performance improvements for folders with many frames.
+
+### Relative Path Storage
+
+All paths stored in XML files are converted to relative paths (relative to the `testSets_results` root directory). This design decision provides several benefits:
+
+-   **Data Portability**: Comparison results can be moved or copied to different locations while maintaining valid path references
+-   **Cross-Platform Compatibility**: Relative paths work consistently across Windows, Linux, and macOS
+-   **Self-Contained Data**: XML files contain all necessary path information without machine-specific absolute paths
+-   **Version Control Friendly**: Relative paths are more suitable for version control systems
+
+The renderCompare UI tool resolves these relative paths at runtime based on the configured `testSets_results` location, ensuring flexibility while maintaining data integrity.
+
+------------------------------------------------------------------------
+
+## Phase 4: Prepare UI Data - Data Aggregation with Status Tracking
+
+Aggregates comparison results from all test sets into a unified XML file for UI visualization, while tracking the completion status of each test.
+
+### Features:
+
+-   **Comprehensive Test Discovery**: Recursively scans `testSets` folder structure to discover all potential tests (regardless of completion status)
+-   **Status Tracking**: Compares `testSets` with `testSets_results` to determine completion status for each test:
+    -   **"Ready"**: Test has completed comparison (Phase 3 complete, `compareResult.xml` exists)
+    -   **"Rendered not compare"**: Test has rendered images but no comparison yet (Phase 2 complete, Phase 3 not run)
+    -   **"Not Ready"**: Test exists in `testSets` but no results found (not yet rendered)
+-   **Flexible Folder Structure Support**: Handles varying directory hierarchies (with or without team/field/stadium/category folders)
+-   **Data Aggregation**: Recursively scans `testSets_results` for all `compareResult.xml` files and extracts metrics
+-   **Render Version Discovery**: Automatically discovers and collects all unique render version folder names (folders containing "_VS_") from `testSets_results` and includes them in `uiData.xml`
+-   **Render Version Association**: Extracts and associates render version folder names with each test entry, enabling UI filtering by render version
+-   **Bootstrap Capability**: Can create `uiData.xml` even when `testSets_results` doesn't exist, marking all tests as "Not Ready"
+-   **Automated Updates**: Merges test discovery with completed comparisons to create/update `uiData.xml` with complete status information
+-   **Thumbnail Generation**: Generates thumbnail paths for visual preview, including for tests with "Rendered not compare" status (extracts from first render folder when Phase 3 hasn't been run)
+-   **Portable Data Storage**: All paths stored as relative paths for cross-platform compatibility
+
+### Design Philosophy
+
+Phase 4 was designed with comprehensive test management and data portability in mind. By scanning both `testSets` and `testSets_results`, the tool provides a complete view of test status across the entire test suite. The aggregation process:
+
+-   **Test Status Visibility**: Enables UI tools to display which tests are ready, partially complete, or not yet started
+-   **Bootstrap Support**: Allows UI tools to show all available tests even before rendering begins
+-   **Unified Data Model**: Provides a single source of truth for test metadata, metrics, and status
+-   **Flexible Discovery**: Automatically adapts to different folder structures (SportType/Event/Set/Frame, SportType/Team/Event/Set/Frame, etc.)
+-   Preserves all essential metadata from individual comparisons
+-   Maintains relative path references for complete portability
+-   Provides summary statistics for quick overview
+-   Enables efficient UI rendering by pre-computing display data
+
+This phase can run independently at any time to update test status, or as part of the complete pipeline, providing flexibility for different workflow needs.
 
 ------------------------------------------------------------------------
 
@@ -85,10 +149,11 @@ Compares rendered images between versions and generates reports.
 
 The system follows a modular architecture:
 
-- **Core Modules** (`src/main.py`, `src/jsonLocalizer.py`, `src/freeDViewRunner.py`, `src/renderCompare.py`): Independent phase implementations
+- **Core Modules** (`src/main.py`, `src/jsonLocalizer.py`, `src/freeDViewRunner.py`, `src/renderCompare.py`, `src/prepareUIData.py`): Independent phase implementations
   - Each phase can run independently or as part of the complete pipeline
   - File-based communication between phases
   - Consistent error handling and logging
+  - Performance-optimized with multi-level parallelization
 
 - **Utilities** (`getDataIni.py`): Configuration file reading utility
   - INI file parsing with error handling
@@ -114,9 +179,18 @@ FreeDView Runner (Phase 2)
     ↓
 Render Compare (Phase 3)
     ├── Loads images from both versions
-    ├── Calculates comparison metrics
+    ├── Calculates comparison metrics (parallel frame processing)
     ├── Generates diff/alpha images
-    └── Creates XML reports
+    └── Creates XML reports (with relative paths)
+    ↓
+Prepare UI Data (Phase 4)
+    ├── Scans testSets folder structure (discovers all tests)
+    ├── Scans testSets_results (finds completed comparisons)
+    ├── Collects render version folder names (folders with "_VS_")
+    ├── Determines status for each test (Ready/Rendered not compare/Not Ready)
+    ├── Extracts and aggregates metadata
+    ├── Generates thumbnail paths (including for "Rendered not compare" status)
+    └── Creates/updates unified uiData.xml with status and render versions
 ```
 
 ## Performance
@@ -125,35 +199,40 @@ Render Compare (Phase 3)
 - **Error Resilience**: Continues processing when individual items fail
 - **Logging**: Detailed logging with configurable verbosity levels
 - **Validation**: Comprehensive input validation before processing
+- **Multi-Level Parallelization**: 
+  - Folder-level: Processes multiple comparison folders concurrently
+  - Frame-level: Processes multiple frames within folders concurrently (Phase 3)
+  - Configurable thread pools for optimal resource utilization
+- **Performance Metrics**: Summary statistics showing processing time and throughput
 
 ------------------------------------------------------------------------
 
 # Architecture Diagram
 
                      ┌────────────────────────────────────┐
-                     │            main.py                  │
-                     │   (CLI Entry Point & Orchestration) │
+                     │            main.py                 │
+                     │   (CLI Entry Point & Orchestration)│
                      └────────────────────────────────────┘
                                    │
-                    ┌──────────────┼──────────────┐
-                    │              │              │
-         ┌──────────▼──────┐ ┌─────▼──────┐ ┌─────▼──────┐
-         │  Phase 1:       │ │ Phase 2:   │ │ Phase 3:   │
-         │  JSON Localizer  │ │ FreeDView  │ │ Render     │
-         │                  │ │ Runner     │ │ Compare    │
-         │  - Scans dirs    │ │            │ │            │
-         │  - Matches       │ │ - Executes │ │ - Compares │
-         │    patterns      │ │   FreeDView│ │   images   │
-         │  - Creates       │ │ - Renders  │ │ - Generates│
-         │    testMe.json   │ │   sequences│ │   reports  │
-         └──────────────────┘ └────────────┘ └────────────┘
-                    │              │              │
-                    └──────────────┼──────────────┘
+                    ┌──────────────┼──────────────┬──────────────┐
+                    │              │              │              │
+         ┌──────────▼──────┐ ┌─────▼──────┐ ┌─────▼──────┐ ┌─────▼───────┐
+         │  Phase 1:       │ │ Phase 2:   │ │ Phase 3:   │ │ Phase 4:    │
+         │  JSON Localizer │ │ FreeDView  │ │ Render     │ │ Prepare     │
+         │                 │ │ Runner     │ │ Compare    │ │ UI Data     │
+         │  - Scans dirs   │ │            │ │            │ │             │
+         │  - Matches      │ │ - Executes │ │ - Compares │ │ - Scans     │
+         │    patterns     │ │   FreeDView│ │   images   │ │   XML files │
+         │  - Creates      │ │ - Renders  │ │ - Generates│ │ - Aggregates│
+         │    testMe.json  │ │   sequences│ │   reports  │ │   data      │
+         └─────────────────┘ └────────────┘ └────────────┘ └─────────────┘
+                    │              │              │              │
+                    └──────────────┼──────────────┴──────────────┘
                                    │
                      ┌─────────────▼─────────────┐
                      │   getDataIni.py           │
                      │   (Configuration Reader)  │
-                     └────────────────────────────┘
+                     └───────────────────────────┘
 
 ------------------------------------------------------------------------
 
@@ -168,6 +247,7 @@ Render Compare (Phase 3)
 │   ├── 📄 jsonLocalizer.py   # Phase 1: JSON file localization
 │   ├── 📄 freeDViewRunner.py # Phase 2: FreeDView rendering execution
 │   ├── 📄 renderCompare.py   # Phase 3: Image comparison and analysis
+│   ├── 📄 prepareUIData.py   # Phase 4: UI data aggregation
 │   └── 📄 getDataIni.py      # INI configuration file reader utility
 │
 ├── 📁 tests/                  # Unit tests
@@ -241,6 +321,9 @@ python src/main.py render
 
 # Phase 3: Render Compare
 python src/main.py compare
+
+# Phase 4: Prepare UI Data
+python src/main.py prepare-ui
 ```
 
 **Custom INI File:**
@@ -331,7 +414,7 @@ testSets_results/
                     ├── freedview_version1/           # Rendered images (original version)
                     ├── freedview_version2/           # Rendered images (test version)
                     └── results/
-                        ├── compareResult.xml          # ONE XML with data for ALL frames
+                        ├── compareResult.xml          # ONE XML with data for ALL frames (relative paths)
                         ├── diff_images/              # Visual difference images (ONE per frame)
                         │   ├── 0135.jpg              ← Diff image for frame 135
                         │   ├── 0136.jpg              ← Diff image for frame 136
@@ -342,6 +425,20 @@ testSets_results/
                             ├── 0136.png              ← Alpha mask for frame 136
                             ├── 0137.png              ← Alpha mask for frame 137
                             └── ...                   ← One alpha mask per frame
+```
+
+**After Phase 4 (UI Data Aggregation):**
+
+```
+testSets_results/
+├── uiData.xml                    # Aggregated data for UI (all comparisons)
+└── SportType/                    # e.g., NFL
+    └── EventName/                # e.g., E17_01_07_16_01_25_LIVE_05
+        └── SetName/              # e.g., S170123190428
+            └── F####/            # e.g., F0224
+                └── freedview_version1_VS_version2/
+                    └── results/
+                        └── compareResult.xml          # Individual comparison data
 ```
 
 **Note:** Frame numbers use 4-digit format with leading zeros (e.g., `0135.jpg`, `0136.jpg`). The actual frame numbers depend on the `startFrame` and `endFrame` values in the `standAloneRender.json` file.
@@ -395,10 +492,93 @@ The `compareResult.xml` file contains aggregated comparison data for all frames 
 
 **XML File Notes:**
 - **One XML file per frame folder** 
-- Contains metadata: paths, version names, event/sport/stadium info, frame range
+- Contains metadata: paths (stored as relative paths for portability), version names, event/sport/stadium info, frame range
 - Contains per-frame SSIM values in the `<frames>` section
 - `minVal` and `maxVal` represent the minimum and maximum SSIM values across all frames
 - Each `<frame>` element contains `frameIndex` and `value` (SSIM score)
+- **All paths are relative** to the `testSets_results` root directory for cross-platform compatibility and data portability
+
+### UI Data XML Structure (Phase 4)
+
+Phase 4 generates `uiData.xml` in the `testSets_results` root, containing aggregated data from all tests with status tracking. The file includes all tests discovered in `testSets`, regardless of completion status:
+
+```xml
+<?xml version="1.0" ?>
+<uiData>
+    <renderVersions>
+        <version>freedview_1.2.1.3_1.0.0.7_VS_freedView_1.3.0.0_1.0.0.1</version>
+        <version>freedview_1.3.2.0_1.0.0.3_VS_freedview_1.3.5.0_1.0.0.0</version>
+        <!-- Additional render version folder names... -->
+    </renderVersions>
+    <entries>
+        <entry>
+            <id>1</id>
+            <eventName>E16_05_16_18_04_00__LIVE_01</eventName>
+            <sportType>NBA</sportType>
+            <stadiumName></stadiumName>
+            <categoryName></categoryName>
+            <numberOfFrames>285</numberOfFrames>
+            <minValue>0.985</minValue>
+            <numFramesUnderMin>42</numFramesUnderMin>
+            <thumbnailPath>NBA/EventName/SetName/F0525/freedview_1.2.1.3_1.0.0.7/0001.jpg</thumbnailPath>
+            <status>Ready</status>
+            <notes></notes>
+            <renderVersions>freedview_1.3.2.0_1.0.0.3_VS_freedview_1.3.5.0_1.0.0.0</renderVersions>
+        </entry>
+        <entry>
+            <id>2</id>
+            <eventName>E15_08_10_19_51_35__LIVE_10</eventName>
+            <sportType>MLB</sportType>
+            <stadiumName>Dodgers</stadiumName>
+            <categoryName></categoryName>
+            <numberOfFrames>0000</numberOfFrames>
+            <minValue>0.0000</minValue>
+            <numFramesUnderMin>0</numFramesUnderMin>
+            <thumbnailPath>MLB/Dodgers/E15_08_10_19_51_35__LIVE_10/S160320083938/F0388/freedview_1.2.1.3_1.0.0.7/0001.jpg</thumbnailPath>
+            <status>Rendered not compare</status>
+            <notes></notes>
+            <renderVersions>freedview_1.2.1.3_1.0.0.7_VS_freedView_1.3.0.0_1.0.0.1</renderVersions>
+        </entry>
+        <entry>
+            <id>3</id>
+            <eventName>E16_02_07_18_27_43_LIVE_24</eventName>
+            <sportType>NFL</sportType>
+            <stadiumName></stadiumName>
+            <categoryName></categoryName>
+            <numberOfFrames>0000</numberOfFrames>
+            <minValue>0.0000</minValue>
+            <numFramesUnderMin>0</numFramesUnderMin>
+            <thumbnailPath></thumbnailPath>
+            <status>Not Ready</status>
+            <notes></notes>
+            <renderVersions></renderVersions>
+        </entry>
+        <!-- Additional entries... -->
+    </entries>
+</uiData>
+```
+
+**UI Data XML Notes:**
+- **One XML file for all tests** in the `testSets_results` root (includes all tests from `testSets`, not just completed ones)
+- **Render Versions Section**: Contains a `<renderVersions>` section listing all unique render version folder names found in `testSets_results` (folders with names containing "_VS_", e.g., `freedview_1.2.1.3_1.0.0.7_VS_freedView_1.3.0.0_1.0.0.1`). Each version appears only once, sorted alphabetically for consistent ordering.
+- Contains aggregated metadata from all `compareResult.xml` files (for completed tests)
+- Includes **status field** for each test: `"Ready"` (Phase 3 complete), `"Rendered not compare"` (Phase 2 complete, Phase 3 not run), or `"Not Ready"` (not yet rendered)
+- Includes thumbnail paths (relative) for visual preview:
+    - For "Ready" status: Thumbnail extracted from `compareResult.xml` sourcePath
+    - For "Rendered not compare" status: Thumbnail extracted from first render folder (e.g., `freedview_1.2.1.3_1.0.0.7`) when Phase 3 hasn't been run
+    - For "Not Ready" status: Empty thumbnail path
+- **Render Versions Field**: Each `<entry>` includes a `<renderVersions>` field containing the render version folder name(s) that the test belongs to:
+    - Extracted from the test's folder structure in `testSets_results` (e.g., `F####/freedview_X_VS_Y/`)
+    - For tests with completed comparisons: Extracted from the `compareResult.xml` file path or thumbnail path
+    - For tests with rendered images but no comparison: Extracted from the render folder structure
+    - For "Not Ready" tests: Empty string (no render versions yet)
+    - Format: Comma-separated list if a test belongs to multiple render versions (e.g., `"version1,version2"`)
+    - Enables UI tools to filter tests by render version using a comboBox dropdown
+    - Supports "All render versions" mode (default) which displays all tests regardless of render version
+- Provides summary statistics for quick overview
+- Designed for efficient loading in UI applications
+- Enables UI tools to display test completion status and identify which tests still need processing
+- Enables UI tools to discover and filter by available render version comparisons
 
 ------------------------------------------------------------------------
 
@@ -438,6 +618,7 @@ freedviewPath = D:\freeDView_tester\freedviewVer
 freedviewVer = freedview_1.2.1.6_1.0.0.5_VS_freedview_1.2.1.6_1.0.0.8
 eventName = E##_##_##_##_##_##__
 setName = S####
+run_on_test_list = []
 ```
 
 ### Configuration Parameters
@@ -449,6 +630,41 @@ setName = S####
 | `freedviewVer` | Version string format: `version1_VS_version2` | `freedview_1.2.1.6_1.0.0.5_VS_freedview_1.2.1.6_1.0.0.8` |
 | `eventName` | Pattern to match event folders (`#` = digit) | `E##_##_##_##_##_##__` |
 | `setName` | Pattern to match set folders (`#` = digit) | `S####` |
+| `run_on_test_list` | Optional: List of test keys to process (empty `[]` = process all tests) | `[]` or `[SportType/Event/Set/F####]` |
+
+### Test Filtering with `run_on_test_list`
+
+The `run_on_test_list` parameter allows you to specify which tests to process in Phases 1-3. This is useful when you want to:
+- Run specific tests without processing the entire test suite
+- Re-run failed tests
+- Process tests incrementally
+- Batch process multiple selected tests from the UI tool
+
+**Format:**
+- Empty `[]`: Process all tests (default behavior)
+- Single test: `[SportType/Event/Set/F####]` where the path is relative to `testSets` root
+- Multiple tests: `[test1, test2, test3]` (comma-separated list within brackets)
+
+**Examples:**
+```ini
+# Process all tests
+run_on_test_list = []
+
+# Process a single test
+run_on_test_list = [NFL/E17_01_07_16_01_25_LIVE_05/S170123190428/F0224]
+
+# Process multiple tests (comma-separated)
+run_on_test_list = [NFL/E17_01_07_16_01_25_LIVE_05/S170123190428/F0224, MLB/Dodgers/E15_08_10_19_51_35__LIVE_10/S160320083938/F0388, NBA/E16_05_16_18_04_00__LIVE_01/S170516180400/F0211]
+```
+
+**UI Tool Integration:**
+The complementary `tableview_test` UI tool can automatically update this parameter when you select multiple rows and choose to run test commands:
+- Select multiple rows using Ctrl+Click
+- Right-click and choose "Run All Phases" or "Run Phase 3"
+- The UI tool automatically formats all selected test keys as a comma-separated list
+- Example output: `run_on_test_list = [NFL/E17_01_07_16_01_25_LIVE_05/S170123190428/F0224, MLB/Dodgers/E15_08_10_19_51_35__LIVE_10/S160320083938/F0388]`
+
+**Note:** Phase 4 (Prepare UI Data) always processes all tests regardless of `run_on_test_list` to maintain a complete `uiData.xml` file. The `run_on_test_list` parameter only affects Phases 1-3.
 
 ### Setup Steps
 
@@ -459,7 +675,13 @@ setName = S####
 
 ### Multiple Version Comparisons
 
-For comparing multiple version groups, create separate INI files for each comparison:
+The tool supports two modes for handling multiple version comparisons:
+
+**Mode 1: Automatic Discovery (Recommended)**
+Set `freedviewVer = ""` (empty) in the INI file to automatically discover and process all version comparison folders in `testSets_results`. This eliminates the need to manually configure each version comparison and allows the tool to process all available comparisons in a single run.
+
+**Mode 2: Explicit Version Specification**
+For comparing specific version groups, create separate INI files for each comparison:
 
 **Example - Multiple INI Files:**
 
