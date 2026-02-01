@@ -36,10 +36,38 @@ class JsonLocalizer:
         set_test_path_tag = 'setTestPath'
         event_name_tag = 'eventName'
         set_name_tag = 'setName'
+        test_filter_tag = 'run_on_test_list'
 
         json_file_path_set_test = data_ini.getDataINI(ini_path, set_test_path_tag)[0]
         event_name_set_test = data_ini.getDataINI(ini_path, event_name_tag)[0]
         set_name_set_test = data_ini.getDataINI(ini_path, set_name_tag)[0]
+        test_filter_raw = data_ini.getDataINI(ini_path, test_filter_tag)[0] if data_ini.getDataINI(ini_path, test_filter_tag)[0] != data_ini.ERROR_VALUE else ""
+
+        # Parse run_on_test_list (comma-separated or newline-separated list of testKeys)
+        # Handles empty filter as: "", "[]", or whitespace-only
+        # Supports bracket format: [test1] or [test1, test2, test3]
+        test_filter_set = set()
+        if test_filter_raw and test_filter_raw.strip():
+            test_filter_stripped = test_filter_raw.strip()
+            # Handle empty array format: "[]"
+            if test_filter_stripped == "[]" or test_filter_stripped == "":
+                logger.debug("run_on_test_list is empty ([]) - processing all tests")
+            else:
+                # Strip brackets if present: [test1] -> test1, [test1, test2] -> test1, test2
+                if test_filter_stripped.startswith('[') and test_filter_stripped.endswith(']'):
+                    test_filter_stripped = test_filter_stripped[1:-1].strip()
+                # Split by comma or newline, strip whitespace
+                for key in test_filter_stripped.replace('\n', ',').split(','):
+                    key = key.strip()
+                    # Skip empty keys and "[]" entries
+                    if key and key != "[]":
+                        test_filter_set.add(key.replace('\\', '/'))  # Normalize path separators
+                if test_filter_set:
+                    logger.info(f"run_on_test_list active: {len(test_filter_set)} test(s) specified")
+                else:
+                    logger.debug("run_on_test_list is empty - processing all tests")
+        else:
+            logger.debug("run_on_test_list is empty - processing all tests")
 
         # Validate INI data
         if json_file_path_set_test == data_ini.ERROR_VALUE:
@@ -53,7 +81,7 @@ class JsonLocalizer:
          json_folder_list, json_file_list,
          event_with_set_path_list) = self.get_json_files(
             json_file_path_set_test, event_name_set_test,
-            set_name_set_test, create_folders
+            set_name_set_test, create_folders, test_filter_set
         )
 
         # Create localized copies of JSON files with updated paths.
@@ -68,7 +96,8 @@ class JsonLocalizer:
         json_file_path: str,
         event_name_set_test: str,
         set_name_set_test: str,
-        create_folders: bool
+        create_folders: bool,
+        test_filter_set: set = None
     ) -> Tuple[List[str], List[str], List[str], List[str], List[str], List[str]]:
         """
         Find all JSON files in the directory structure.
@@ -78,11 +107,14 @@ class JsonLocalizer:
             event_name_set_test: Pattern to match event names
             set_name_set_test: Pattern to match set names
             create_folders: Whether to create missing folder structures
+            test_filter_set: Optional set of testKeys to filter by (if empty/None, process all)
 
         Returns:
             Tuple of lists: (folder_set_list, folder_frame_list, frame_name_list,
                            json_folder_list, json_file_list, event_with_set_path_list)
         """
+        if test_filter_set is None:
+            test_filter_set = set()
         event_path_list = []
         self.sport_folder_index = 1
 
@@ -162,12 +194,34 @@ class JsonLocalizer:
                             json_file = os.path.join(json_folder, 'standAloneRender.json')
 
                             if os.path.exists(json_file):
-                                folder_set_list.append(set_path)
-                                folder_frame_list.append(frame_path)
-                                frame_name_list.append(frame_name)
-                                json_folder_list.append(json_folder)
-                                json_file_list.append(json_file.replace('\\', '/'))
-                                event_with_set_path_list.append(event_path)
+                                # Generate testKey for filtering (relative path from json_file_path)
+                                try:
+                                    frame_path_obj = Path(frame_path)
+                                    json_path_obj = Path(json_file_path)
+                                    relative_path = frame_path_obj.relative_to(json_path_obj)
+                                    test_key = str(relative_path).replace('\\', '/')
+                                    
+                                    # Apply filter if specified
+                                    if test_filter_set and test_key not in test_filter_set:
+                                        continue  # Skip this frame if not in filter
+                                    
+                                    folder_set_list.append(set_path)
+                                    folder_frame_list.append(frame_path)
+                                    frame_name_list.append(frame_name)
+                                    json_folder_list.append(json_folder)
+                                    json_file_list.append(json_file.replace('\\', '/'))
+                                    event_with_set_path_list.append(event_path)
+                                except ValueError:
+                                    # If relative path can't be computed, skip filtering for this item
+                                    # (shouldn't happen in normal operation)
+                                    if not test_filter_set:
+                                        # Only add if no filter is active
+                                        folder_set_list.append(set_path)
+                                        folder_frame_list.append(frame_path)
+                                        frame_name_list.append(frame_name)
+                                        json_folder_list.append(json_folder)
+                                        json_file_list.append(json_file.replace('\\', '/'))
+                                        event_with_set_path_list.append(event_path)
 
                         except ValueError:
                             pass
