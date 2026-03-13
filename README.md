@@ -4,19 +4,11 @@ Automated testing and comparison tool for FreeDView renderer versions. This tool
 
 ## TL;DR
 
--   **JSON Localization**: Automatically localizes JSON configuration files for rendering
--   **Multi-Version Rendering**: Renders image sequences using different FreeDView versions via subprocess integration
--   **Image Comparison**: Compares rendered outputs using MSE and SSIM metrics
--   **Visual Analysis**: Generates diff images and alpha masks for visual inspection
--   **Detailed Reports**: Creates XML reports with per-frame comparison data
--   **Progress Tracking**: Real-time progress indication for long operations
--   **External Process Management**: Integrates with FreeDView renderer with error handling
--   **Parallel Processing**: Multi-threaded rendering and comparison for improved performance
--   **Performance Optimization**: Frame-level parallelization for image processing operations
--   **Data Aggregation**: Automated UI data preparation from comparison results with status tracking
--   **Status Management**: Tracks test completion status (Ready, Rendered not compare, Not Ready) for comprehensive test monitoring
--   **Render Version Discovery**: Automatically discovers and catalogs all render version folder names for UI filtering and selection
--   **Portable Data Storage**: Relative path storage for cross-platform compatibility
+-   **Pipeline Automation**: Four-phase Python CLI tool managing JSON localization, rendering, comparison, and XML data aggregation.
+-   **Process Management**: Executes external rendering engines via `subprocess` for multi-version batch rendering.
+-   **Image Analysis**: Calculates MSE and SSIM metrics, and generates diff/alpha maps using OpenCV and scikit-image.
+-   **Concurrency**: Implements multi-threading at both folder and frame levels to accelerate batch image processing.
+-   **Data Export**: Generates structured XML reports with relative paths for cross-platform consumption by UI tools.
 
 **Quick Start:**
 ```bash
@@ -30,7 +22,9 @@ python src/main.py all
 
 FreeDView Tester is a four-phase automated testing pipeline designed to identify visual differences between FreeDView renderer versions. The tool processes test sets, renders them using different FreeDView versions, and provides comprehensive comparison analysis with aggregated results ready for UI visualization.
 
-It was originally developed to support the needs of my team at Intel, providing an automated solution for regression testing and version comparison of the FreeDView renderer.
+
+### Project Inspiration
+This tool was inspired by a custom internal utility I developed for my team during my tenure as a CG Engineer at Intel. While the original tool served specific automated testing needs, this personal project was rebuilt entirely from scratch to create a robust, standalone automated testing and rendering pipeline.
 
 The system follows a modular architecture: each phase is implemented as an independent module. The phases communicate through file-based data exchange, keeping the workflow efficient, stable, and easy to extend.
 
@@ -209,23 +203,23 @@ Prepare UI Data (Phase 4)
 
 # Architecture Diagram
 
-                     ┌────────────────────────────────────┐
+					 ┌────────────────────────────────────┐
                      │            main.py                 │
                      │   (CLI Entry Point & Orchestration)│
                      └────────────────────────────────────┘
                                    │
                     ┌──────────────┼──────────────┬──────────────┐
                     │              │              │              │
-         ┌──────────▼──────┐ ┌─────▼──────┐ ┌─────▼──────┐ ┌─────▼──────┐
-         │  Phase 1:       │ │ Phase 2:   │ │ Phase 3:   │ │ Phase 4:    │
-         │  JSON Localizer │ │ FreeDView  │ │ Render     │ │ Prepare     │
-         │                 │ │ Runner     │ │ Compare    │ │ UI Data     │
-         │  - Scans dirs   │ │            │ │            │ │             │
-         │  - Matches      │ │ - Executes │ │ - Compares │ │ - Scans     │
-         │    patterns     │ │   FreeDView│ │   images   │ │   XML files │
-         │  - Creates      │ │ - Renders  │ │ - Generates│ │ - Aggregates│
-         │    testMe.json  │ │   sequences│ │   reports  │ │   data      │
-         └─────────────────┘ └────────────┘ └────────────┘ └──────────── ┘
+         ┌─────────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+         │  Phase 1:       │ │ Phase 2:    │ │ Phase 3:    │ │ Phase 4:    │
+         │  JSON Localizer │ │ FreeDView   │ │ Render      │ │ Prepare     │
+         │                 │ │ Runner      │ │ Compare     │ │ UI Data     │
+         │  - Scans dirs   │ │             │ │             │ │             │
+         │  - Matches      │ │ - Executes  │ │ - Compares  │ │ - Scans     │
+         │    patterns     │ │   FreeDView │ │   images    │ │   XML files │
+         │  - Creates      │ │ - Renders   │ │ - Generates │ │ - Aggregates│
+         │    testMe.json  │ │   sequences │ │   reports   │ │   data      │
+         └─────────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
                     │              │              │              │
                     └──────────────┼──────────────┴──────────────┘
                                    │
@@ -233,7 +227,6 @@ Prepare UI Data (Phase 4)
                      │   getDataIni.py           │
                      │   (Configuration Reader)  │
                      └───────────────────────────┘
-
 ------------------------------------------------------------------------
 
 ## Project Structure
@@ -775,6 +768,17 @@ python src/main.py all --ini freeDView_tester_v2.ini
 
 ------------------------------------------------------------------------
 
+## Testing
+
+The project includes a comprehensive suite of unit tests to ensure the reliability of the testing pipeline. These tests cover JSON localization, INI parsing, image comparison, and data aggregation.
+
+To run all tests:
+```bash
+python -m unittest discover tests
+python -m unittest tests.test_render_compare
+
+```
+
 ## Version
 
 **Current Version**: 1.0.0  
@@ -791,18 +795,18 @@ Features comprehensive error handling, logging, and progress tracking.
 
 A complementary C++/Qt UI application, [renderCompare](https://github.com/PerryGu/renderCompare), is available for visualizing and analyzing the comparison results generated by this tool. The UI tool provides an interactive interface for browsing diff images, alpha masks, and XML reports.
 
+
+## Contact & Author
+
+**Perry Guy** - Technical Artist & CG Engineer  
+*Extensive experience in 3D Graphics, Tool Development, and Performance Optimization.*
+
+📧 **Email**: [perryguy2@gmail.com](mailto:perryguy2@gmail.com)
+
+**YouTube Channel**: [@ThePerryGuy](https://www.youtube.com/@ThePerryGuy)
+
+
 ## License
 
-**Copyright (c) [Year] - All Rights Reserved**
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-This software and associated documentation files (the "Software") are proprietary and confidential.
-
-**RESTRICTIONS:**
-- The Software may NOT be copied, reproduced, or distributed in any form
-- The Software may NOT be used, modified, or reverse-engineered without explicit written permission
-- The Software may NOT be shared with third parties
-
-**NO WARRANTY:**
-The Software is provided "AS IS" without warranty of any kind, express or implied.
-
-All rights reserved. Unauthorized copying, use, or distribution of this Software is strictly prohibited.
