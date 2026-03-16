@@ -203,30 +203,40 @@ Prepare UI Data (Phase 4)
 
 # Architecture Diagram
 
-					 ┌────────────────────────────────────┐
-                     │            main.py                 │
-                     │   (CLI Entry Point & Orchestration)│
-                     └────────────────────────────────────┘
-                                   │
-                    ┌──────────────┼──────────────┬──────────────┐
-                    │              │              │              │
-         ┌─────────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-         │  Phase 1:       │ │ Phase 2:    │ │ Phase 3:    │ │ Phase 4:    │
-         │  JSON Localizer │ │ FreeDView   │ │ Render      │ │ Prepare     │
-         │                 │ │ Runner      │ │ Compare     │ │ UI Data     │
-         │  - Scans dirs   │ │             │ │             │ │             │
-         │  - Matches      │ │ - Executes  │ │ - Compares  │ │ - Scans     │
-         │    patterns     │ │   FreeDView │ │   images    │ │   XML files │
-         │  - Creates      │ │ - Renders   │ │ - Generates │ │ - Aggregates│
-         │    testMe.json  │ │   sequences │ │   reports   │ │   data      │
-         └─────────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
-                    │              │              │              │
-                    └──────────────┼──────────────┴──────────────┘
-                                   │
-                     ┌─────────────▼─────────────┐
-                     │   getDataIni.py           │
-                     │   (Configuration Reader)  │
-                     └───────────────────────────┘
+```mermaid
+flowchart TD
+    %% Main Entry Point
+    MAIN["main.py<br/>(CLI Entry Point & Orchestration)"]
+    
+    %% Phases
+    P1["Phase 1:<br/>JSON Localizer<br/><br/>- Scans dirs<br/>- Matches patterns<br/>- Creates testMe.json"]
+    P2["Phase 2:<br/>FreeDView Runner<br/><br/>- Executes FreeDView<br/>- Renders sequences"]
+    P3["Phase 3:<br/>Render Compare<br/><br/>- Compares images<br/>- Generates reports"]
+    P4["Phase 4:<br/>Prepare UI Data<br/><br/>- Scans XML files<br/>- Aggregates data"]
+    
+    %% Configuration Reader
+    CONF["getDataIni.py<br/>(Configuration Reader)"]
+
+    %% Connections
+    MAIN --> P1
+    MAIN --> P2
+    MAIN --> P3
+    MAIN --> P4
+    
+    P1 --> CONF
+    P2 --> CONF
+    P3 --> CONF
+    P4 --> CONF
+
+    %% Styling (Dark Theme)
+    style MAIN fill:#2D3748,stroke:#63B3ED,stroke-width:2px,color:#FFFFFF
+    style P1 fill:#253237,stroke:#68D391,stroke-width:1px,color:#E2E8F0
+    style P2 fill:#253237,stroke:#68D391,stroke-width:1px,color:#E2E8F0
+    style P3 fill:#253237,stroke:#68D391,stroke-width:1px,color:#E2E8F0
+    style P4 fill:#253237,stroke:#68D391,stroke-width:1px,color:#E2E8F0
+    style CONF fill:#1A202C,stroke:#F6AD55,stroke-width:2px,stroke-dasharray: 5 5,color:#CBD5E0
+```
+
 ------------------------------------------------------------------------
 
 ## Project Structure
